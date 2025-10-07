@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Calcul DNB – Moyennes annuelles (autonome + explications)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{
+  /* Palette sépia (contrôle continu) */
+  --sepia-1:#f4ecd8;  /* cell bg */
+  --sepia-2:#e9ddc1;  /* header */
+  --sepia-3:#fbf7ee;  /* zebra alt */
+  /* Palette complémentaire douce (épreuves) -> cyan/bleu */
+  --comp-1:#dff3f6;   /* cell bg */
+  --comp-2:#cfe9ee;   /* header */
+  --comp-3:#eef9fb;   /* zebra alt */
+  --border:#d6c9b2;
+  --text:#222;
+  --accent:#0d6efd;
+}
+body { font-family: system-ui, Arial, sans-serif; margin: 2rem; background:#f8f9fa; color:var(--text); }
+h1 { margin-top:0; color:#0b3d91; } /* bleu foncé */
+table { border-collapse: collapse; width:100%; max-width:980px; margin-bottom:1rem; background:#fff; }
+th,td { border:1px solid var(--border); padding:.6rem; text-align:center; }
+fieldset { border:1px solid var(--border); padding:1rem; margin:1rem 0; background:#fff; }
+legend { font-weight:600; }
+input[type="number"] { width:5rem; padding:.3rem; }
+.btn { padding:.6rem 1.2rem; background:var(--accent); color:#fff; border:none; cursor:pointer; border-radius:6px; }
+.btn:hover { filter:brightness(0.95); }
+.actions { display:flex; gap:.6rem; flex-wrap:wrap; }
+.result { background:#e6ffed; border:1px solid #b7eb8f; padding:1rem; margin-top:1rem; font-size:1.1rem; }
+.small { font-size:.85rem; color:#555; }
+footer { margin-top:2rem; text-align:center; color:#444; font-size:.95rem; }
+
+/* TABLE Contrôle continu (sépié) */
+.table-cc th { background:var(--sepia-2); }
+.table-cc td { background:var(--sepia-1); }
+.table-cc tbody tr:nth-child(even) td { background:var(--sepia-3); }
+
+/* TABLE Épreuves (complémentaire) */
+.table-ep th { background:var(--comp-2); }
+.table-ep td { background:var(--comp-1); }
+.table-ep tbody tr:nth-child(even) td { background:var(--comp-3); }
+
+/* Explications */
+.explain { background:#fff; border-left:4px solid var(--accent); }
+.explain ul, .explain ol { margin:.4rem 0 .6rem 1.2rem; }
+.explain code { background:#f1f3f5; padding:.05rem .3rem; border-radius:3px; }
+
+/* Impression PDF */
+@media print {
+  .no-print { display:none !important; }
+  body { margin: 1.2cm; background:#fff; }
+  fieldset, table { break-inside: avoid; }
+  a[href]:after { content:""; }
+}
+</style>
+</head>
+<body>
+<h1>🎓 Calcul des points du DNB 2026</h1>
+
+<p class="small no-print">
+Saisissez votre <strong>moyenne annuelle</strong> (sur 20) pour chacune des 12 disciplines.  
+La <strong>note du bonus</strong> est : <code>(Note obtenue - 10)</code> (option plafonnée à 20) s’ajoute <em>avant</em> la division par 12.
+</p>
+
+<form id="dnbForm" onsubmit="event.preventDefault(); calculer();">
+  <fieldset>
+    <legend>Contrôle continu – 12 moyennes annuelles (/20)</legend>
+    <table class="table-cc">
+      <thead>
+        <tr><th>Discipline</th><th>Moyenne annuelle</th></tr>
+      </thead>
+      <tbody id="disciplines"></tbody>
+    </table>
+    <label>Option annuelle (facultative, /20) :
+      <input type="number" id="option" step="0.1" min="0" max="20" value="10">
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Épreuves finales (/20)</legend>
+    <table class="table-ep">
+      <thead>
+        <tr><th>Épreuve</th><th>Coefficient</th><th>Note /20</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Français</td><td>×2</td><td><input type="number" id="francais" step="0.1" min="0" max="20" value="10"></td></tr>
+        <tr><td>Mathématiques</td><td>×2</td><td><input type="number" id="maths" step="0.1" min="0" max="20" value="10"></td></tr>
+        <tr><td>Histoire-Géographie</td><td>×1,5</td><td><input type="number" id="histoire_geo" step="0.1" min="0" max="20" value="10"></td></tr>
+        <tr><td>EMC</td><td>×0,5</td><td><input type="number" id="emc" step="0.1" min="0" max="20" value="10"></td></tr>
+        <tr><td>Sciences</td><td>×2</td><td><input type="number" id="sciences" step="0.1" min="0" max="20" value="10"></td></tr>
+        <tr><td>Oral</td><td>×2</td><td><input type="number" id="oral" step="0.1" min="0" max="20" value="10"></td></tr>
+      </tbody>
+    </table>
+  </fieldset>
+
+  <div class="actions no-print">
+    <button type="submit" class="btn">🧮 Calculer la note DNB</button>
+    <button type="button" class="btn" onclick="creerPDF()">🖨️ Créer un PDF</button>
+  </div>
+</form>
+
+<div id="resultat" class="result" style="display:none;"></div>
+
+<!-- EXPLICATIONS -->
+<fieldset class="explain" id="explications">
+  <legend>Comment est calculé le résultat du DNB 2026&nbsp;?</legend>
+  <p><strong>Objectif :</strong> donner une estimation simple et transparente de la note finale du Diplôme National du Brevet.</p>
+  <ol>
+    <li><strong>Contrôle continu (40&nbsp;%)</strong><br>
+      Saisissez les <strong>12 moyennes annuelles</strong> (sur 20). S’il y a une <strong>option</strong>, on ajoute un <strong>bonus</strong> égal aux points <em>au-dessus de 10</em> (plafonné à 20), puis on divise par 12.<br>
+      <span class="small">Exemple&nbsp;: option à 14/20 → bonus = <code>14 − 10 = 4</code> points ajoutés avant la division par 12.</span>
+    </li>
+    <li><strong>Épreuves finales (60&nbsp;%)</strong><br>
+      Moyenne pondérée (sur 20) avec les coefficients&nbsp;: Français ×<strong>2</strong> · Mathématiques ×<strong>2</strong> · Histoire-Géographie ×<strong>1,5</strong> · EMC ×<strong>0,5</strong> · Sciences ×<strong>2</strong> · Oral ×<strong>2</strong>.
+    </li>
+    <li><strong>Note finale</strong><br>
+      <code>Note finale = 0,4 × (Contrôle continu) + 0,6 × (Épreuves finales)</code>.
+    </li>
+    <li><strong>Mentions 🏅</strong><br>
+      Assez bien ≥ <strong>12</strong> · Bien ≥ <strong>14</strong> · Très bien ≥ <strong>16</strong> · Très bien avec félicitations ≥ <strong>18</strong>.
+    </li>
+  </ol>
+  <p class="small">Remarque&nbsp;: ce simulateur est pédagogique&nbsp;: il n’enregistre <em>aucune</em> donnée et n’a pas valeur de décision officielle.</p>
+</fieldset>
+
+<footer>
+  Simulateur créé par <strong>Yannis CHRISTON</strong> à l'aide de l'IA | 2025 | ychriston@ac-guadeloupe.fr
+</footer>
+
+<script>
+// --- Liste des 12 disciplines (moyennes annuelles) ---
+const matieres = [
+  "Français","Mathématiques","Histoire-Géographie","EMC","LV1","LV2",
+  "Sciences Physiques","SVT","Technologie","Arts Plastiques","Éducation musicale","EPS"
+];
+
+// Génération du tableau (valeurs par défaut = 10)
+const tbody = document.getElementById("disciplines");
+matieres.forEach(m => {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td style="text-align:left">${m}</td>
+    <td><input type="number" step="0.1" min="0" max="20" class="annuelle" data-m="${m}" value="10"></td>`;
+  tbody.appendChild(tr);
+});
+
+function clamp20(x){ return Math.max(0, Math.min(20, x)); }
+function mention(note){
+  if (note >= 18) return "Très bien avec félicitations du jury";
+  if (note >= 16) return "Très bien";
+  if (note >= 14) return "Bien";
+  if (note >= 12) return "Assez bien";
+  return "Sans mention";
+}
+
+function calculer(){
+  // 1) Contrôle continu
+  let sumAnnual = 0, count = 0;
+  document.querySelectorAll(".annuelle").forEach(el => {
+    const v = parseFloat(el.value);
+    if (!isNaN(v)) { sumAnnual += clamp20(v); count++; }
+  });
+  if (count !== 12) { alert("Veuillez saisir les 12 moyennes annuelles."); return null; }
+
+  const opt = parseFloat(document.getElementById("option").value);
+  const bonus = isNaN(opt) ? 0 : Math.max(0, clamp20(opt) - 10);
+  const cc = (sumAnnual + bonus) / 12;
+
+  // 2) Épreuves finales
+  const coeffs = { francais:2, maths:2, histoire_geo:1.5, emc:0.5, sciences:2, oral:2 };
+  let sw = 0, sc = 0;
+  for (const [k, c] of Object.entries(coeffs)) {
+    const n = parseFloat(document.getElementById(k).value);
+    if (isNaN(n)) { alert("Veuillez saisir toutes les notes d'épreuves finales."); return null; }
+    sw += clamp20(n) * c; sc += c;
+  }
+  const finals = sw / sc;
+
+  // 3) Note finale & mention
+  const finale = clamp20(0.4 * cc + 0.6 * finals);
+  const ment = mention(finale);
+
+  // Affichage
+  const res = document.getElementById("resultat");
+  res.innerHTML = `
+    <strong>Contrôle continu (40&nbsp;%):</strong> ${cc.toFixed(2)}/20<br>
+    <strong>Épreuves finales (60&nbsp;%):</strong> ${finals.toFixed(2)}/20<br><hr>
+    <strong>Note finale DNB :</strong> ${finale.toFixed(2)}/20<br>
+    <strong>Mention :</strong> ${ment}
+  `;
+  res.style.display = "block";
+
+  return { cc, finals, finale, ment };
+}
+
+function creerPDF(){
+  const r = calculer();
+  if (r) { setTimeout(() => window.print(), 50); }
+}
+</script>
+</body>
+</html>
